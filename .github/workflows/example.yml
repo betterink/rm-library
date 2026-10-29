@@ -1,0 +1,41 @@
+name: Build and check AppLoad example
+
+on:
+  push:
+    paths: ['example/**', 'tools/**', '.github/workflows/example.yml']
+  pull_request:
+    paths: ['example/**', 'tools/**', '.github/workflows/example.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Install Qt resource compiler
+        run: sudo apt-get update && sudo apt-get install -y qt6-base-dev-tools
+      - name: Compile native backends
+        run: tools/gradle.sh --console=plain linkReleaseExecutableLinuxX64 linkReleaseExecutableLinuxArm64
+      - name: Test actual Linux backend protocol
+        run: python3 tools/test_backend.py example/build/bin/linuxX64/releaseExecutable/entry.kexe
+      - name: Package tablet application
+        run: python3 tools/example.py build --backend-binary example/build/bin/linuxArm64/releaseExecutable/entry.kexe
+      - name: Record ELF dependencies
+        run: |
+          readelf -h dist/ink-example-dev/backend/entry
+          readelf -l dist/ink-example-dev/backend/entry
+          readelf -d dist/ink-example-dev/backend/entry
+          readelf --version-info dist/ink-example-dev/backend/entry
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ink-example-dev-linux-arm64
+          path: |
+            dist/ink-example-dev.tar.gz
+            dist/ink-example-dev.tar.gz.sha256

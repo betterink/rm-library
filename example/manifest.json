@@ -1,0 +1,10 @@
+{
+  "id": "ink.example.dev",
+  "name": "Ink Example (Dev)",
+  "entry": "/ui/Main.qml",
+  "loadsBackend": true,
+  "canHaveMultipleFrontends": false,
+  "supportsScaling": true,
+  "aspectRatio": "auto",
+  "width": "auto"
+}
