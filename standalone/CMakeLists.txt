@@ -1,0 +1,11 @@
+cmake_minimum_required(VERSION 3.21)
+project(ink_benchmark VERSION 0.1.0 LANGUAGES CXX)
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_AUTOMOC ON)
+set(CMAKE_AUTORCC ON)
+find_package(Qt6 6.5 REQUIRED COMPONENTS Core Gui Qml Quick)
+add_executable(ink-benchmark main.cpp StrokeSurface.cpp StrokeSurface.h
+    TabletNavigation.cpp TabletNavigation.h EpaperDisplayControl.cpp EpaperDisplayControl.h application.qrc)
+target_link_libraries(ink-benchmark PRIVATE Qt6::Core Qt6::Gui Qt6::Qml Qt6::Quick)
+install(TARGETS ink-benchmark RUNTIME DESTINATION bin)

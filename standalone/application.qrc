@@ -1,0 +1,4 @@
+<RCC><qresource prefix="/benchmark">
+  <file alias="Main.qml">ui/Main.qml</file>
+  <file alias="Button.qml">ui/Button.qml</file>
+</qresource></RCC>

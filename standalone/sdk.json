@@ -1,0 +1,11 @@
+{
+  "product": "ferrari",
+  "targetFirmware": "3.29.0.153",
+  "candidateFirmware": "3.28.0.172",
+  "compatibilityVerified": false,
+  "source": "https://developer.remarkable.com/links",
+  "urls": {
+    "aarch64": "https://storage.googleapis.com/remarkable-codex-toolchain/3.28.0.172/remarkable-production-image-5.8.203-ferrari-public-aarch64-toolchain.sh",
+    "x86_64": "https://storage.googleapis.com/remarkable-codex-toolchain/3.28.0.172/remarkable-production-image-5.8.203-ferrari-public-x86_64-toolchain.sh"
+  }
+}

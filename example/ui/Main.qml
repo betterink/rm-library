@@ -14,6 +14,9 @@ Rectangle {
     property string status: "Waiting for Kotlin backend…"
     property string backendInfo: "No response yet"
     property string counter: "0"
+    property int localCounter: 0
+    property double requestStarted: 0
+    property int lastReplyMs: -1
 
     // Closing the frontend intentionally keeps the backend alive. This lets us
     // verify AppLoad's existing background behaviour without concurrent terminate().
@@ -22,8 +25,9 @@ Rectangle {
         replyTimeout.stop()
     }
     function request(type, contents) {
+        if (waiting) return
         waiting = true
-        status = "Waiting for backend…"
+        requestStarted = Date.now()
         endpoint.sendMessage(type, contents)
         replyTimeout.restart()
     }
@@ -37,6 +41,8 @@ Rectangle {
         onMessageReceived: function(type, contents) {
             if (type !== 101 && type !== 102 && type !== 103) return
             root.connected = true
+            if (root.waiting && root.requestStarted > 0)
+                root.lastReplyMs = Date.now() - root.requestStarted
             root.waiting = false
             startup.stop()
             replyTimeout.stop()
@@ -69,13 +75,23 @@ Rectangle {
         }
     }
     Flickable {
+        id: viewport
         anchors.fill: parent
         anchors.margins: 32 * root.unit
         contentHeight: content.height
+        contentWidth: width
+        flickableDirection: Flickable.VerticalFlick
+        // Continuing to drag at either edge must not animate the whole page.
+        boundsBehavior: Flickable.StopAtBounds
+        boundsMovement: Flickable.StopAtBounds
+        pixelAligned: true
+        // Keep continuous dragging, but bound inertial work after release.
+        maximumFlickVelocity: 1000 * root.unit
+        flickDeceleration: 5000 * root.unit
         clip: true
         Column {
             id: content
-            width: parent.width
+            width: viewport.width
             spacing: 18 * root.unit
             Text { text: "INK / APPLOAD CHECK"; font.pixelSize: 18 * root.unit }
             Text { text: "Hello, Paper Pro."; font.pixelSize: 42 * root.unit; font.bold: true }
@@ -88,9 +104,55 @@ Rectangle {
             Rectangle { width: parent.width; height: 2; color: "black" }
             Text {
                 width: parent.width
+                text: "Local input test · no Kotlin or socket messages"
+                font.pixelSize: 21 * root.unit
+                wrapMode: Text.WordWrap
+            }
+            Rectangle {
+                id: dragSurface
+                width: parent.width
+                height: 150 * root.unit
+                color: "white"
+                border.color: "black"
+                border.width: 1
+                Rectangle {
+                    id: dragTarget
+                    x: 12 * root.unit
+                    y: 12 * root.unit
+                    width: 56 * root.unit
+                    height: width
+                    color: "black"
+                    MouseArea {
+                        anchors.fill: parent
+                        preventStealing: true
+                        drag.target: dragTarget
+                        drag.minimumX: 2
+                        drag.maximumX: dragSurface.width - dragTarget.width - 2
+                        drag.minimumY: 2
+                        drag.maximumY: dragSurface.height - dragTarget.height - 2
+                    }
+                }
+            }
+            ActionButton {
+                width: parent.width; scaleFactor: root.unit
+                label: "Local taps: " + root.localCounter
+                onClicked: root.localCounter++
+            }
+            Text {
+                width: parent.width
+                // Status changes cannot resize the document while scrolling.
+                height: 110 * root.unit
                 text: root.status + "\n\n" + root.backendInfo
                 font.pixelSize: 21 * root.unit
                 wrapMode: Text.WrapAnywhere
+                elide: Text.ElideRight
+                maximumLineCount: 4
+            }
+            Text {
+                width: parent.width
+                text: root.lastReplyMs < 0 ? "Backend round trip: not measured" : "Backend round trip: " + root.lastReplyMs + " ms (excludes display latency)"
+                font.pixelSize: 18 * root.unit
+                wrapMode: Text.WordWrap
             }
             Text { text: "Backend counter: " + root.counter; font.pixelSize: 32 * root.unit }
             ActionButton {

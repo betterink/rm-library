@@ -18,6 +18,8 @@ EXAMPLE = ROOT / 'example'
 DIST = ROOT / 'dist'
 PACKAGE = 'ink-example-dev'
 APP_ROOT = '/home/root/xovi/exthome/appload'
+SSH_OPTIONS = ['-o', 'ConnectTimeout=8', '-o', 'ConnectionAttempts=1',
+               '-o', 'ServerAliveInterval=10', '-o', 'ServerAliveCountMax=3']
 
 
 def run(*args, **kwargs):
@@ -31,7 +33,11 @@ def rcc_path():
         if shutil.which(name):
             return shutil.which(name)
     for path in ('/opt/homebrew/opt/qt/bin/rcc', '/opt/homebrew/opt/qt/libexec/rcc',
+                 '/opt/homebrew/opt/qt/share/qt/libexec/rcc',
+                 '/opt/homebrew/opt/qtbase/share/qt/libexec/rcc',
                  '/usr/local/opt/qt/bin/rcc', '/usr/local/opt/qt/libexec/rcc',
+                 '/usr/local/opt/qt/share/qt/libexec/rcc',
+                 '/usr/local/opt/qtbase/share/qt/libexec/rcc',
                  '/usr/lib/qt6/libexec/rcc'):
         if Path(path).is_file():
             return path
@@ -44,6 +50,34 @@ def check_elf(path, machine=183):
     if (len(header) < 20 or header[:6] != b'\x7fELF\x02\x01'
             or struct.unpack_from('<H', header, 18)[0] != machine):
         raise RuntimeError(f'{path} must be a little-endian ELF64 executable for machine {machine}')
+
+
+def elf_dependencies(path):
+    """Read ELF64 DT_NEEDED entries without a host readelf executable."""
+    data = Path(path).read_bytes()
+    try:
+        phoff = struct.unpack_from('<Q', data, 32)[0]
+        entry_size, count = struct.unpack_from('<HH', data, 54)
+        if entry_size < 56:
+            raise ValueError('Invalid program header size')
+        segments = [struct.unpack_from('<IIQQQQQQ', data, phoff + i * entry_size)
+                    for i in range(count)]
+        dynamic = next((s for s in segments if s[0] == 2), None)
+        if dynamic is None:
+            return []
+        entries = []
+        for offset in range(dynamic[2], dynamic[2] + dynamic[5], 16):
+            tag, value = struct.unpack_from('<qQ', data, offset)
+            if tag == 0:
+                break
+            entries.append((tag, value))
+        address = next(value for tag, value in entries if tag == 5)
+        load = next(s for s in segments if s[0] == 1 and s[3] <= address < s[3] + s[5])
+        base = load[2] + address - load[3]
+        return [data[base + value:data.index(b'\0', base + value)].decode('utf-8')
+                for tag, value in entries if tag == 1]
+    except (struct.error, ValueError, StopIteration, UnicodeDecodeError) as error:
+        raise RuntimeError(f'Cannot read ELF dependencies from {path}: {error}') from error
 
 
 def make_icon(path):
@@ -70,6 +104,10 @@ def build(args):
         run(ROOT / 'tools/gradle.sh', '--console=plain', 'linkReleaseExecutableLinuxArm64')
         binary = EXAMPLE / 'build/bin/linuxArm64/releaseExecutable/entry.kexe'
     check_elf(binary)
+    dependencies = elf_dependencies(binary)
+    print('ELF dependencies: ' + (', '.join(dependencies) or '(none)'), flush=True)
+    if 'libcrypt.so.1' in dependencies:
+        raise RuntimeError('Backend still requires libcrypt.so.1. Rebuild with --as-needed before packaging.')
     bundle = DIST / PACKAGE
     if bundle.exists():
         shutil.rmtree(bundle)
@@ -103,17 +141,24 @@ def deploy(args):
     # the user to stop this example first; never restart the native UI implicitly.
     remote_script = f'''set -eu
 app_root={APP_ROOT}
-test -d "$app_root"
+echo '[deploy] Connected; checking AppLoad installation.'
+if ! test -d "$app_root"; then
+    echo "AppLoad application directory missing: $app_root" >&2
+    exit 1
+fi
 if pgrep -f '^backend/entry /tmp/ink[.]example[.]dev[.]sock$' >/dev/null; then
     echo 'Stop the Ink Example backend before deploying.' >&2
     exit 1
 fi
 stage=$(mktemp -d /home/root/.ink-example-stage.XXXXXX)
 trap 'rm -rf "$stage"' EXIT
+echo '[deploy] Receiving and extracting bundle.'
 tar -xzf - -C "$stage"
 test -f "$stage/{PACKAGE}/manifest.json"
 test -x "$stage/{PACKAGE}/backend/entry"
+echo '[deploy] Running Kotlin executable self-test.'
 "$stage/{PACKAGE}/backend/entry" --self-test
+echo '[deploy] Activating application bundle.'
 mkdir -p /home/root/.ink-example-backups
 if test -e "$app_root/{PACKAGE}"; then
     backup=$(mktemp -d /home/root/.ink-example-backups/install.XXXXXX)
@@ -127,8 +172,17 @@ else
 fi
 echo 'Installed Ink Example (Dev). Open AppLoad and refresh its app list.'
 '''
+    print(f'[deploy] Connecting to {args.host} over SSH (8-second connection timeout)…', flush=True)
     with archive.open('rb') as source:
-        run('ssh', args.host, remote_script, stdin=source)
+        try:
+            run('ssh', *SSH_OPTIONS, args.host, remote_script, stdin=source)
+        except subprocess.CalledProcessError as error:
+            if error.returncode == 255:
+                raise RuntimeError(
+                    'SSH connection failed or disconnected. Check the tablet USB connection, '
+                    f'then run: ssh -o ConnectTimeout=8 {args.host}'
+                ) from error
+            raise RuntimeError(f'Remote deployment failed (exit {error.returncode}); see the last deployment step above.') from error
 
 
 def main():

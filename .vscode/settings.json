@@ -1,0 +1,15 @@
+{
+    "java.configuration.updateBuildConfiguration": "interactive",
+    "cmake.sourceDirectory": "${workspaceFolder}/standalone",
+    "C_Cpp.default.compilerPath": "/usr/bin/clang++",
+    "C_Cpp.default.cppStandard": "c++17",
+    "C_Cpp.default.includePath": [
+        "${workspaceFolder}/standalone",
+        "/opt/homebrew/opt/qt/include"
+    ],
+    "C_Cpp.default.macFrameworkPath": [
+        "/opt/homebrew/opt/qt/lib",
+        "/System/Library/Frameworks",
+        "/Library/Frameworks"
+    ]
+}

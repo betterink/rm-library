@@ -41,6 +41,24 @@ Use IntelliJ for Kotlin and Gradle; QML can be edited here or in Qt Creator.
 Use the IDE terminal for the Python build/deploy commands. A macOS IDE cannot
 directly run this Linux executable; use the Linux protocol test or physical tablet.
 
+If QML inspections cannot import `QtQuick` and show a `/Users/runner/work/...`
+path, configure the QML plugin to use the local language server
+`/opt/homebrew/opt/qtdeclarative/bin/qmlls` and import directory
+`/opt/homebrew/opt/qt/share/qt/qml`. Restart the language server or reopen the IDE
+after changing its configuration. A local `.qmlls.ini` at the workspace root and/or
+this Gradle project root can supply the import directory:
+
+```ini
+[General]
+importPaths=/opt/homebrew/opt/qt/share/qt/qml
+no-cmake-calls=true
+```
+
+These machine-specific files are ignored by Git. AppLoad's `net.asivery.AppLoad`
+module is supplied by the tablet host and is not part of Homebrew Qt, so its IDE
+type resolution requires AppLoad tooling separately; a QtQuick path fix does not
+make this host module runnable on the Mac.
+
 Output:
 
 ```text
@@ -57,6 +75,12 @@ Packaging rejects a backend unless it is a little-endian AArch64 ELF64 binary.
 Qt resources use format version 2 without compression. The native executable can
 still depend on the tablet's dynamic loader and system libraries: `--self-test`
 on the physical tablet is the compatibility gate, not successful cross-compilation.
+
+The build enables `--as-needed` to drop unused libraries from Kotlin's POSIX
+bindings, including `libcrypt.so.1` which is absent on the target tablet.
+Packaging prints ELF dependencies and rejects older backends still requiring
+`libcrypt.so.1`. Rebuild existing bundles after linker changes; deploy does not
+rebuild them automatically.
 
 ## Deploy and launch
 
@@ -112,6 +136,45 @@ XOVI boot changes are needed. Choose a different SSH alias with `--host ALIAS`.
 The counter is deliberately process-local. Reattachment persistence is distinct
 from saving data to disk. All screen changes are request-driven; there is no
 continuous animation or background polling after the initial connection.
+
+## Interaction performance investigation
+
+The example now clamps scroll bounds (no overshoot/bounce), aligns scrolling to
+pixels, bounds flick inertia, avoids full-button gray press/disabled fills, and
+reserves space for changing backend status. It retains continuous scrolling.
+These reduce avoidable redraws; they do not select or guarantee a fast display
+refresh waveform.
+
+Use the black square's local drag test and the local tap counter before testing
+backend actions. Those local interactions send no Kotlin/socket messages. Backend
+round-trip time measures request-to-QML-response only, not input-to-visible-pixel
+latency. No drawing/pen-latency claim is made by this diagnostic.
+
+On the same device and firmware, compare:
+
+1. Native reMarkable scrolling and handwriting as the baseline.
+2. This example fullscreen: slow drag, fast flick, repeated edge scrolling,
+   local square dragging, local taps, and backend taps.
+3. Windowed mode as a separate measurement (scaling/compositing can differ).
+4. If local interactions remain poor, a standalone Qt Quick application using
+   the official epaper platform/scenegraph path, outside AppLoad, as an A/B test.
+
+Record visible response with high-frame-rate video, flicker/ghosting, and whether
+latency grows during sustained input. Log backend round trips separately. A good
+round-trip value does not demonstrate good screen latency. Do not increase refresh
+frequency or change display waveforms blindly to mask queued rendering work.
+
+Continuous handwriting needs a separate pen-aware prototype: local stylus input,
+incremental stroke rendering, appropriate display updates and palm handling. Keep
+per-point rendering off the Kotlin socket round-trip path. QML can remain the UI
+shell and Kotlin the application backend; a C++ Qt/native rendering component may
+be needed for the live canvas. Compare its performance on real Paper Pro hardware
+before committing to an AppLoad-hosted canvas or claiming native-equivalent input.
+If AppLoad cannot meet the measured requirement, retain it as a launcher and
+evaluate an independent renderer with a tested return-to-stock lifecycle.
+
+See [Qt Flickable bounds](https://doc.qt.io/qt-6/qml-qtquick-flickable.html) and the
+[official Qt Quick epaper example](https://developer.remarkable.com/documentation/qt_epaper).
 
 ## Lifecycle choice
 

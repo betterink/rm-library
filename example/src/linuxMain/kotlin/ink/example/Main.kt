@@ -3,6 +3,7 @@
 package ink.example
 
 import kotlinx.cinterop.*
+import platform.linux.sockaddr_un
 import platform.posix.*
 
 private const val MAX_PAYLOAD = 65536

@@ -6,15 +6,15 @@ Rectangle {
     property real scaleFactor: 1
     signal clicked()
     height: 64 * scaleFactor
-    color: area.pressed ? "#dddddd" : "white"
+    // Avoid repainting the whole button gray on every press/release.
+    color: "white"
     border.color: enabled ? "black" : "#999999"
-    border.width: 2
-    opacity: enabled ? 1 : 0.45
+    border.width: area.pressed ? 4 : 2
     Text {
         anchors.centerIn: parent
         text: button.label
         font.pixelSize: 22 * button.scaleFactor
-        color: "black"
+        color: button.enabled ? "black" : "#777777"
     }
     MouseArea {
         id: area
